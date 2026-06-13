@@ -1,0 +1,20 @@
+target/
+*.class
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+
+# Spring Boot helper
+HELP.md
+
+# Secrets - keep OAuth client id/secret/refresh token in env vars, never in git
+.env
+
+# OS
+Thumbs.db
+.DS_Store

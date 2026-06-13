@@ -1,0 +1,23 @@
+server:
+  port: 8080
+
+line:
+  # LINE Developers console > your channel > Basic settings > Channel secret
+  channel-secret: ${LINE_CHANNEL_SECRET:}
+  # LINE Developers console > your channel > Messaging API > Channel access token (long-lived)
+  channel-token: ${LINE_CHANNEL_TOKEN:}
+
+google:
+  drive:
+    # OAuth 2.0 client (Google Cloud > APIs & Services > Credentials > OAuth client ID)
+    client-id: ${GOOGLE_CLIENT_ID:}
+    client-secret: ${GOOGLE_CLIENT_SECRET:}
+    # Long-lived refresh token obtained once via the OAuth consent flow (e.g. OAuth Playground)
+    refresh-token: ${GOOGLE_REFRESH_TOKEN:}
+    # ID of the Drive folder photos are saved into (the part after /folders/ in the URL).
+    # Leave blank to upload to your My Drive root.
+    folder-id: ${GOOGLE_DRIVE_FOLDER_ID:}
+
+logging:
+  level:
+    com.wedding.upload: INFO
