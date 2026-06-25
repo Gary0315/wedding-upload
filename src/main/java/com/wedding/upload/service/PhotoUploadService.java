@@ -81,7 +81,7 @@ public class PhotoUploadService {
         try {
             lineApiClient.replyText(
                     pending.replyToken(),
-                    "照片已收到，謝謝你的分享！\n\n這邊有個小謎題 ♾️ + 🎀 + 👫 + ❤️\n如果回答成功的話 可以得到我們的祝福唷！");
+                    "照片已收到，謝謝你的分享！\n\n這裡有個小謎題\n♾️ + 🎀 + 👫 + ❤️\n\n如果回答成功的話\n可以得到我們的祝福唷！");
         } catch (Exception e) {
             log.error("Failed to send batched reply for {}", key, e);
         }
