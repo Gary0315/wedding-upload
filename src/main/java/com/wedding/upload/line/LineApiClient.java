@@ -53,4 +53,25 @@ public class LineApiClient {
                 .retrieve()
                 .toBodilessEntity();
     }
+
+    /**
+     * 回傳圖片訊息。LINE 要求 originalContentUrl 與 previewImageUrl 都是
+     * 公開可存取的 HTTPS 網址（沒有 redirect、檔案大小限制請見 LINE 文件）。
+     * 這裡為了簡單起見，預覽圖直接用原圖網址。
+     */
+    public void replyImage(String replyToken, String imageUrl) {
+        Map<String, Object> payload = Map.of(
+                "replyToken", replyToken,
+                "messages", List.of(Map.of(
+                        "type", "image",
+                        "originalContentUrl", imageUrl,
+                        "previewImageUrl", imageUrl)));
+
+        apiClient.post()
+                .uri("/v2/bot/message/reply")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(payload)
+                .retrieve()
+                .toBodilessEntity();
+    }
 }

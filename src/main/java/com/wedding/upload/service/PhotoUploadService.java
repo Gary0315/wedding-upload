@@ -3,6 +3,7 @@ package com.wedding.upload.service;
 import com.wedding.upload.drive.GoogleDriveService;
 import com.wedding.upload.line.LineApiClient;
 import com.wedding.upload.line.LineContent;
+import com.wedding.upload.puzzle.PuzzleImageCatalog;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,10 +12,14 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
 @Service
@@ -24,19 +29,50 @@ public class PhotoUploadService {
     private static final DateTimeFormatter TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
     private static final long REPLY_DEBOUNCE_SECONDS = 3;
     private static final String ANONYMOUS_USER_KEY = "__anonymous__";
+    private static final int ANSWER_LENGTH = 4;
+    // 這些是 LINE OA 選單按鈕的文字，雖然剛好也是 4 個字，但不算謎題答案。
+    private static final Set<String> RESERVED_KEYWORDS = Set.of("電子喜帖", "婚禮資訊");
+
+    // 想新增謎題就在這個 List 裡加一行 new Puzzle("emoji 組合", "提示", "答案")。
+    // 第三個欄位「答案」會拿來：
+    //   1) 比對使用者回的文字
+    //   2) 從 static/puzzles/{答案}/ 撈圖片
+    private static final List<Puzzle> PUZZLES = List.of(
+            new Puzzle("♾️ + 🎀 + 👫 + ❤️", "猜一個成語", "永結同心"),
+            new Puzzle("💯 + 📅 + 👍 + 🈴", "猜一個成語", "百年好合"),
+            new Puzzle("🌅 + 🥜 + 💰 + 👶", "猜一個成語", "早生貴子"),
+            new Puzzle("🌸 + 👍 + 🌕 + ⭕", "猜一個成語", "花好月圓"),
+            new Puzzle("🦳 + 👴 + 🤝 + 👵", "猜一個成語", "白頭偕老"),
+            new Puzzle("🍯 + 🍯 + 🐝 + 🐝", "猜一個成語", "甜甜蜜蜜"),
+            new Puzzle("☁️ + 🛠️ + 🧀 + 🈴", "猜一個成語", "天作之合"),
+            new Puzzle("☀️ + 🏀 + 🍝 + 📦", "猜一個成語", "情投意合"),
+            new Puzzle("❤️ + ❤️ + 🐘 + 🖨️", "猜一個成語", "心心相印"),
+            new Puzzle("🎹 + 🌈 + 🕊️ + 🐦", "猜一個成語", "琴瑟和鳴"),
+            new Puzzle("🐺 + 🥬 + 👧 + 🐱", "猜一個成語", "郎才女貌"),
+            new Puzzle("🚪 + 🔔 + 🐯 + ✔️", "猜一個成語", "門當戶對"),
+            new Puzzle("🎯 + 🀄 + 💉 + 📌", "猜一個成語", "命中注定"),
+            new Puzzle("🏋️ + 🌑 + 🐧 + 🍓", "猜一個成語", "舉案齊眉"),
+            new Puzzle("🐝 + 🕊️ + ✌️ + ✈️", "猜一個成語", "比翼雙飛")
+    );
 
     private final LineApiClient lineApiClient;
     private final GoogleDriveService driveService;
+    private final PuzzleImageCatalog puzzleImageCatalog;
     private final ScheduledExecutorService replyScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r, "photo-reply-debounce");
         t.setDaemon(true);
         return t;
     });
     private final ConcurrentHashMap<String, PendingReply> pendingReplies = new ConcurrentHashMap<>();
+    // userKey -> 該使用者目前該回答的成語。使用者下次傳新照片會被覆蓋。
+    private final ConcurrentHashMap<String, String> userAssignments = new ConcurrentHashMap<>();
 
-    public PhotoUploadService(LineApiClient lineApiClient, GoogleDriveService driveService) {
+    public PhotoUploadService(LineApiClient lineApiClient,
+                              GoogleDriveService driveService,
+                              PuzzleImageCatalog puzzleImageCatalog) {
         this.lineApiClient = lineApiClient;
         this.driveService = driveService;
+        this.puzzleImageCatalog = puzzleImageCatalog;
     }
 
     // Runs off the webhook thread so we can return 200 to LINE immediately.
@@ -53,6 +89,52 @@ public class PhotoUploadService {
             }
         } catch (Exception e) {
             log.error("Failed to save LINE image {} to Google Drive", messageId, e);
+        }
+    }
+
+    // 使用者傳文字訊息進來：判斷是不是在猜謎題答案。
+    @Async
+    public void handleTextMessage(String text, String replyToken, String userId) {
+        if (text == null || replyToken == null || replyToken.isBlank()) {
+            return;
+        }
+        String normalized = normalize(text);
+        // 只有「正好 4 個字」的訊息才當成猜謎；其他文字（含選單關鍵字、聊天）都跳過。
+        if (normalized.codePointCount(0, normalized.length()) != ANSWER_LENGTH) {
+            return;
+        }
+        // 跟我們的 LINE OA 選單按鈕同名的訊息直接放行，不算謎題答案。
+        if (RESERVED_KEYWORDS.contains(normalized)) {
+            return;
+        }
+        String key = userId != null ? userId : ANONYMOUS_USER_KEY;
+        String expectedAnswer = userAssignments.get(key);
+        if (expectedAnswer == null) {
+            // 使用者目前沒有題目可以答（還沒傳過照片，或上一題答過了），直接忽略。
+            return;
+        }
+        if (!normalized.equals(normalize(expectedAnswer))) {
+            // 答錯：保持沉默，不消耗 reply token，讓使用者繼續猜。
+            return;
+        }
+        // 答對了！清除 assignment 並從祝福圖池子隨機抽一張回傳。
+        userAssignments.remove(key);
+        Optional<String> imageUrl = puzzleImageCatalog.pickRandomImageUrl();
+        if (imageUrl.isEmpty()) {
+            // 為什麼會 empty？PuzzleImageCatalog 內部已經印出原因 WARN（沒圖、或 baseUrl 沒設）。
+            // 這裡不重複印訊息，免得混淆。
+            // 沒圖也別放生使用者，至少回個文字祝福
+            try {
+                lineApiClient.replyText(replyToken, "答對了！「%s」🎉 祝你幸福快樂！".formatted(expectedAnswer));
+            } catch (Exception e) {
+                log.error("Failed to send fallback text reply", e);
+            }
+            return;
+        }
+        try {
+            lineApiClient.replyImage(replyToken, imageUrl.get());
+        } catch (Exception e) {
+            log.error("Failed to send blessing image for {}", expectedAnswer, e);
         }
     }
 
@@ -78,13 +160,28 @@ public class PhotoUploadService {
         if (pending == null) {
             return;
         }
+        Puzzle puzzle = pickPuzzle();
+        // 記下「這個使用者該答的成語」，等他回文字時比對。
+        userAssignments.put(key, puzzle.answer());
         try {
-            lineApiClient.replyText(
-                    pending.replyToken(),
-                    "照片已收到，謝謝你的分享！\n\n這裡有個小謎題\n♾️ + 🎀 + 👫 + ❤️\n\n如果回答成功的話\n可以得到我們的祝福唷！");
+            lineApiClient.replyText(pending.replyToken(), buildReplyMessage(puzzle));
         } catch (Exception e) {
             log.error("Failed to send batched reply for {}", key, e);
         }
+    }
+
+    private Puzzle pickPuzzle() {
+        return PUZZLES.get(ThreadLocalRandom.current().nextInt(PUZZLES.size()));
+    }
+
+    private String buildReplyMessage(Puzzle puzzle) {
+        return "照片已收到，謝謝你的分享！\n\n這裡有個小謎題\n%s\n(%s)\n\n如果回答成功的話\n會有小驚喜唷！"
+                .formatted(puzzle.emojis(), puzzle.hint());
+    }
+
+    // 比對前先把全形/半形空白和換行清掉，避免「永 結 同 心」這種輸入被判錯。
+    private static String normalize(String s) {
+        return s.replaceAll("\\s+", "").trim();
     }
 
     @PreDestroy
@@ -93,6 +190,8 @@ public class PhotoUploadService {
     }
 
     private record PendingReply(String replyToken, ScheduledFuture<?> future) {}
+
+    private record Puzzle(String emojis, String hint, String answer) {}
 
     private String buildFilename(String userId, String messageId, String contentType) {
         String safeUser = userId != null ? userId : "unknown";

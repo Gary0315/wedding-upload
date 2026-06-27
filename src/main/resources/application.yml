@@ -1,6 +1,12 @@
 server:
   port: ${PORT:8080}
 
+app:
+  # 對外的公開 HTTPS 網址（LINE 回傳圖片時必須）。
+  # 開發時通常是 ngrok 的網址，例如 https://abc123.ngrok.io
+  # 正式環境就填你的正式網域。
+  public-base-url: ${APP_PUBLIC_BASE_URL:}
+
 line:
   # LINE Developers console > your channel > Basic settings > Channel secret
   channel-secret: ${LINE_CHANNEL_SECRET:}

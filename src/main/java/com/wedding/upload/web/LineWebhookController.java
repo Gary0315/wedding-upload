@@ -58,14 +58,22 @@ public class LineWebhookController {
             return;
         }
         JsonNode message = event.path("message");
-        if (!"image".equals(message.path("type").asText())) {
-            return;
-        }
-
-        String messageId = message.path("id").asText();
+        String messageType = message.path("type").asText();
         String replyToken = event.path("replyToken").asText(null);
         String userId = event.path("source").path("userId").asText(null);
 
-        photoUploadService.handleImageMessage(messageId, replyToken, userId);
+        switch (messageType) {
+            case "image" -> {
+                String messageId = message.path("id").asText();
+                photoUploadService.handleImageMessage(messageId, replyToken, userId);
+            }
+            case "text" -> {
+                String text = message.path("text").asText("");
+                photoUploadService.handleTextMessage(text, replyToken, userId);
+            }
+            default -> {
+                // 其他訊息類型（貼圖、影片等）目前不處理
+            }
+        }
     }
 }
