@@ -62,10 +62,7 @@ public class LineApiClient {
     public void replyImage(String replyToken, String imageUrl) {
         Map<String, Object> payload = Map.of(
                 "replyToken", replyToken,
-                "messages", List.of(Map.of(
-                        "type", "image",
-                        "originalContentUrl", imageUrl,
-                        "previewImageUrl", imageUrl)));
+                "messages", List.of(imageMessage(imageUrl)));
 
         apiClient.post()
                 .uri("/v2/bot/message/reply")
@@ -73,5 +70,32 @@ public class LineApiClient {
                 .body(payload)
                 .retrieve()
                 .toBodilessEntity();
+    }
+
+    /**
+     * 同一個 reply token 一次回「一張圖 + 一段文字」。
+     * LINE Reply API 一次最多可以塞 5 則訊息，這裡固定送 2 則。
+     * 訊息顯示順序：先圖、再文字。
+     */
+    public void replyImageAndText(String replyToken, String imageUrl, String text) {
+        Map<String, Object> payload = Map.of(
+                "replyToken", replyToken,
+                "messages", List.of(
+                        imageMessage(imageUrl),
+                        Map.of("type", "text", "text", text)));
+
+        apiClient.post()
+                .uri("/v2/bot/message/reply")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(payload)
+                .retrieve()
+                .toBodilessEntity();
+    }
+
+    private static Map<String, Object> imageMessage(String imageUrl) {
+        return Map.of(
+                "type", "image",
+                "originalContentUrl", imageUrl,
+                "previewImageUrl", imageUrl);
     }
 }

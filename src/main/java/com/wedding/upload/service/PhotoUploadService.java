@@ -32,6 +32,22 @@ public class PhotoUploadService {
     private static final int ANSWER_LENGTH = 4;
     // 這些是 LINE OA 選單按鈕的文字，雖然剛好也是 4 個字，但不算謎題答案。
     private static final Set<String> RESERVED_KEYWORDS = Set.of("電子喜帖", "婚禮資訊");
+    // 答對謎題後跟著圖片一起回的文字，從這個 List 裡隨機抽一句。
+    // 想新增 / 修改文案就直接編這個清單。
+    private static final List<String> CORRECT_ANSWER_TEXTS = List.of(
+            "答對啦！謝謝你參與我們的小遊戲，期待在婚禮上見到你喔！",
+            "恭喜闖關成功！送上我們的Q版珍藏照，謝謝你一直以來的陪伴與祝福。",
+            "聰明如你！謝謝你和我們一起分享這份喜悅，有你的祝福，我們更幸福了。",
+            "哎喲，很聰明嘛！既然被你答對了，這張限定版Q版照就讓你私藏啦!",
+            "答對了！加碼送上我們滿滿的幸福能量，今天也要開開心心喔！",
+            "傳說中智商爆棚的賓客就是你！恭喜獲得神仙眷侶（自稱）照片一張！",
+            "答對囉！願這份喜氣也帶給你滿滿的好運，事事順心、幸福美滿！",
+            "恭喜過關！祝福你接下來的日子就像這道題一樣，迎刃而解、好運連連！",
+            "解謎成功！送上我們最真摯的祝福，願你天天都有好心情，『字』得其樂！",
+            "解謎成功！謝謝你走進我們的幸福故事。",
+            "恭喜答對！收下這份喜悅，今天也要幸福喔！",
+            "答對啦！期待與你一起見證我們的幸福時刻。"
+    );
 
     // 想新增謎題就在這個 List 裡加一行 new Puzzle("emoji 組合", "提示", "答案")。
     // 第三個欄位「答案」會拿來：
@@ -125,17 +141,24 @@ public class PhotoUploadService {
             // 這裡不重複印訊息，免得混淆。
             // 沒圖也別放生使用者，至少回個文字祝福
             try {
-                lineApiClient.replyText(replyToken, "答對了！「%s」🎉 祝你幸福快樂！".formatted(expectedAnswer));
+                lineApiClient.replyText(replyToken, pickCorrectAnswerText());
             } catch (Exception e) {
                 log.error("Failed to send fallback text reply", e);
             }
             return;
         }
         try {
-            lineApiClient.replyImage(replyToken, imageUrl.get());
+            lineApiClient.replyImageAndText(
+                    replyToken,
+                    imageUrl.get(),
+                    pickCorrectAnswerText());
         } catch (Exception e) {
-            log.error("Failed to send blessing image for {}", expectedAnswer, e);
+            log.error("Failed to send blessing image+text for {}", expectedAnswer, e);
         }
+    }
+
+    private String pickCorrectAnswerText() {
+        return CORRECT_ANSWER_TEXTS.get(ThreadLocalRandom.current().nextInt(CORRECT_ANSWER_TEXTS.size()));
     }
 
     // Coalesces rapid-fire image uploads into a single reply per user.
