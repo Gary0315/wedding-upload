@@ -94,15 +94,17 @@ public class PhotoUploadService {
     // Runs off the webhook thread so we can return 200 to LINE immediately.
     @Async
     public void handleImageMessage(String messageId, String replyToken, String userId) {
+        // 先排謎語回覆的 debounce 計時器，不等 Drive 上傳完成才開始倒數。
+        // 上傳照片跟回謎語是兩件互不相關的事，讓使用者體感延遲只剩 debounce 的 3 秒，
+        // 上傳/下載那幾秒的網路耗時留在背景默默跑完就好。
+        if (replyToken != null && !replyToken.isBlank()) {
+            scheduleBatchedReply(userId, replyToken);
+        }
         try {
             LineContent content = lineApiClient.getMessageContent(messageId);
             String filename = buildFilename(userId, messageId, content.contentType());
             String fileId = driveService.upload(filename, content.contentType(), content.data());
             log.info("Uploaded LINE image {} to Drive file {}", messageId, fileId);
-
-            if (replyToken != null && !replyToken.isBlank()) {
-                scheduleBatchedReply(userId, replyToken);
-            }
         } catch (Exception e) {
             log.error("Failed to save LINE image {} to Google Drive", messageId, e);
         }
