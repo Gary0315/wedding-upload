@@ -30,6 +30,13 @@ public class PhotoUploadService {
     private static final long REPLY_DEBOUNCE_SECONDS = 3;
     private static final String ANONYMOUS_USER_KEY = "__anonymous__";
     private static final int ANSWER_LENGTH = 4;
+    // 婚禮當天前先不出謎題，收到照片一律回「敬請期待」公告。
+    // 9/12 當天要恢復原本的謎題流程，只要把這行改成 true 就好，其他都不用動。
+    private static final boolean PUZZLE_ENABLED = false;
+    // PUZZLE_ENABLED = false 期間，收到照片回的公告文字。
+    private static final String PRE_WEDDING_NOTICE =
+            "照片上傳將於 9/12 婚禮當天開放喔！✨\n"
+            + "到時候別忘了把你們拍的美照，或是以前的合照傳給我們，就可以解鎖隱藏版小遊戲！敬請期待❤️";
     // 這些是 LINE OA 選單按鈕的文字，雖然剛好也是 4 個字，但不算謎題答案。
     private static final Set<String> RESERVED_KEYWORDS = Set.of("電子喜帖", "婚禮資訊");
     // 答對謎題後跟著圖片一起回的文字，從這個 List 裡隨機抽一句。
@@ -183,6 +190,15 @@ public class PhotoUploadService {
     private void flushReply(String key) {
         PendingReply pending = pendingReplies.remove(key);
         if (pending == null) {
+            return;
+        }
+        if (!PUZZLE_ENABLED) {
+            // 不指派謎題答案，所以 handleTextMessage 會直接忽略後續文字訊息。
+            try {
+                lineApiClient.replyText(pending.replyToken(), PRE_WEDDING_NOTICE);
+            } catch (Exception e) {
+                log.error("Failed to send pre-wedding notice for {}", key, e);
+            }
             return;
         }
         Puzzle puzzle = pickPuzzle();
