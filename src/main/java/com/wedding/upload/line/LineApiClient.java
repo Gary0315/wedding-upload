@@ -55,14 +55,15 @@ public class LineApiClient {
     }
 
     /**
-     * 回傳圖片訊息。LINE 要求 originalContentUrl 與 previewImageUrl 都是
-     * 公開可存取的 HTTPS 網址（沒有 redirect、檔案大小限制請見 LINE 文件）。
-     * 這裡為了簡單起見，預覽圖直接用原圖網址。
+     * 回傳圖片訊息。originalContentUrl 與 previewImageUrl 都要是
+     * 公開可存取的 HTTPS 網址，而且兩者的大小上限不一樣：
+     * 原圖最大 10MB，預覽圖最大 1MB。
+     * 兩個欄位塞同一張大圖的話，聊天室裡的預覽會載不出來。
      */
-    public void replyImage(String replyToken, String imageUrl) {
+    public void replyImage(String replyToken, String originalContentUrl, String previewImageUrl) {
         Map<String, Object> payload = Map.of(
                 "replyToken", replyToken,
-                "messages", List.of(imageMessage(imageUrl)));
+                "messages", List.of(imageMessage(originalContentUrl, previewImageUrl)));
 
         apiClient.post()
                 .uri("/v2/bot/message/reply")
@@ -77,11 +78,14 @@ public class LineApiClient {
      * LINE Reply API 一次最多可以塞 5 則訊息，這裡固定送 2 則。
      * 訊息顯示順序：先圖、再文字。
      */
-    public void replyImageAndText(String replyToken, String imageUrl, String text) {
+    public void replyImageAndText(String replyToken,
+                                  String originalContentUrl,
+                                  String previewImageUrl,
+                                  String text) {
         Map<String, Object> payload = Map.of(
                 "replyToken", replyToken,
                 "messages", List.of(
-                        imageMessage(imageUrl),
+                        imageMessage(originalContentUrl, previewImageUrl),
                         Map.of("type", "text", "text", text)));
 
         apiClient.post()
@@ -92,10 +96,10 @@ public class LineApiClient {
                 .toBodilessEntity();
     }
 
-    private static Map<String, Object> imageMessage(String imageUrl) {
+    private static Map<String, Object> imageMessage(String originalContentUrl, String previewImageUrl) {
         return Map.of(
                 "type", "image",
-                "originalContentUrl", imageUrl,
-                "previewImageUrl", imageUrl);
+                "originalContentUrl", originalContentUrl,
+                "previewImageUrl", previewImageUrl);
     }
 }

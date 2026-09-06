@@ -59,7 +59,7 @@ public class PhotoUploadService {
     // 想新增謎題就在這個 List 裡加一行 new Puzzle("emoji 組合", "提示", "答案")。
     // 第三個欄位「答案」會拿來：
     //   1) 比對使用者回的文字
-    //   2) 從 static/puzzles/{答案}/ 撈圖片
+    //   2) 比對成功後從 static/puzzles/ 隨機抽一張祝福圖回傳
     private static final List<Puzzle> PUZZLES = List.of(
             new Puzzle("♾️ + 🎀 + 👫 + ❤️", "猜一個成語", "永結同心"),
             new Puzzle("💯 + 📅 + 👍 + 🈴", "猜一個成語", "百年好合"),
@@ -144,8 +144,8 @@ public class PhotoUploadService {
         }
         // 答對了！清除 assignment 並從祝福圖池子隨機抽一張回傳。
         userAssignments.remove(key);
-        Optional<String> imageUrl = puzzleImageCatalog.pickRandomImageUrl();
-        if (imageUrl.isEmpty()) {
+        Optional<PuzzleImageCatalog.PuzzleImage> image = puzzleImageCatalog.pickRandomImage();
+        if (image.isEmpty()) {
             // 為什麼會 empty？PuzzleImageCatalog 內部已經印出原因 WARN（沒圖、或 baseUrl 沒設）。
             // 這裡不重複印訊息，免得混淆。
             // 沒圖也別放生使用者，至少回個文字祝福
@@ -159,7 +159,8 @@ public class PhotoUploadService {
         try {
             lineApiClient.replyImageAndText(
                     replyToken,
-                    imageUrl.get(),
+                    image.get().originalUrl(),
+                    image.get().previewUrl(),
                     pickCorrectAnswerText());
         } catch (Exception e) {
             log.error("Failed to send blessing image+text for {}", expectedAnswer, e);
