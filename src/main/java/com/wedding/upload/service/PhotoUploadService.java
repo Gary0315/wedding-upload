@@ -32,7 +32,7 @@ public class PhotoUploadService {
     private static final int ANSWER_LENGTH = 4;
     // 婚禮當天前先不出謎題，收到照片一律回「敬請期待」公告。
     // 9/12 當天要恢復原本的謎題流程，只要把這行改成 true 就好，其他都不用動。
-    private static final boolean PUZZLE_ENABLED = false;
+    private static final boolean PUZZLE_ENABLED = true;
     // PUZZLE_ENABLED = false 期間，收到照片回的公告文字。
     private static final String PRE_WEDDING_NOTICE =
             "照片上傳將於 9/12 婚禮當天開放喔！✨\n"
