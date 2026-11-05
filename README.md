@@ -110,6 +110,10 @@ LINE 圖片訊息的兩個欄位大小上限不同：`originalContentUrl` 可到
 缺縮圖時退回用原圖、同時印出 WARN 指名是哪幾張，不會默默壞掉。
 圖片規格與擺放方式見 [`static/puzzles/README.md`](src/main/resources/static/puzzles/README.md)。
 
+> 當天真正送出的那批 Q 版照片是私人照片，不隨這個 repo 發佈。
+> `static/puzzles/` 底下只放三張 `sample-*.jpg` 佔位圖，讓專案能直接跑起來；
+> 自行部署時換成你自己的圖即可。
+
 ### 5. 用 feature flag 切換婚禮前後的行為
 
 正式帳號在婚禮前幾個月就得開放給賓客加好友（電子喜帖、婚禮資訊選單），
@@ -149,7 +153,7 @@ src/main/java/com/wedding/upload/
 ├─ puzzle/PuzzleImageCatalog.java     # 啟動掃描祝福圖 + 縮圖配對，隨機抽圖
 └─ config/                            # AppProperties / LineProperties / DriveProperties / Drive bean
 
-src/main/resources/static/puzzles/    # 祝福圖（原圖）
+src/main/resources/static/puzzles/    # 祝福圖（原圖）─ repo 內只有佔位圖
 └─ preview/                           # 同檔名縮圖，供 previewImageUrl 使用
 ```
 
@@ -197,7 +201,7 @@ export APP_PUBLIC_BASE_URL=https://<your-tunnel>.ngrok.io
 |---|---|
 | `LineSignatureVerifierTest` | 正確簽章通過；換 secret、簽章後改動 body、缺少標頭、亂填字串都必須被拒；channel secret 沒設定時一律拒絕 |
 | `LineWebhookControllerTest` | 驗章失敗回 401 且完全不碰業務邏輯；image / text 事件正確分派；批次送達的事件逐一處理；貼圖與非訊息事件忽略；payload 壞掉仍回 200（否則 LINE 會重送） |
-| `PuzzleImageCatalogTest` | 跑在真正打包進 classpath 的 12 張祝福圖上：每張原圖都要配對到同檔名縮圖（1 MB 預覽限制的回歸測試）、隨機抽圖、`public-base-url` 未設定時回 empty |
+| `PuzzleImageCatalogTest` | 跑在真正打包進 classpath 的那批祝福圖上：每張原圖都要配對到同檔名縮圖（1 MB 預覽限制的回歸測試）、隨機抽圖、`public-base-url` 未設定時回 empty |
 | `PhotoUploadServiceTest` | 連拍合併成單次回覆且只用最新的 reply token、每張照片仍各自歸檔、歸檔檔名格式、Drive 上傳失敗不影響出題、答對送圖、答錯沉默、選單保留字與非 4 字訊息忽略、同一題只能領一次獎、沒有祝福圖時退回純文字 |
 
 測試透過 `PhotoUploadService` 的 package-private 建構子把 debounce 縮短成 300 ms，
@@ -225,4 +229,5 @@ JVM 參數設定 `-XX:MaxRAMPercentage=75 -XX:+UseSerialGC -XX:TieredStopAtLevel
   也沒有 Spring context 的啟動測試（那需要一組真的憑證）。
 - **上傳失敗不重試**：Drive 上傳失敗只記錄 error log，不重試也不通知賓客。
 - **謎題與圖片打包在 classpath**：新增謎題或祝福圖需要重新部署。
+- **repo 內只有佔位圖**：真實的祝福圖是私人照片，不隨 repo 發佈，部署時需自行放入。
 - **沒有防濫用機制**：沒有 rate limit，也不檢查檔案大小上限，僅因為使用者範圍封閉（婚禮賓客）而可接受。
