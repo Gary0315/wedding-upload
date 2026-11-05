@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -27,7 +28,7 @@ public class PhotoUploadService {
 
     private static final Logger log = LoggerFactory.getLogger(PhotoUploadService.class);
     private static final DateTimeFormatter TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
-    private static final long REPLY_DEBOUNCE_SECONDS = 3;
+    private static final Duration REPLY_DEBOUNCE = Duration.ofSeconds(3);
     private static final String ANONYMOUS_USER_KEY = "__anonymous__";
     private static final int ANSWER_LENGTH = 4;
     // 婚禮當天前先不出謎題，收到照片一律回「敬請期待」公告。
@@ -81,6 +82,7 @@ public class PhotoUploadService {
     private final LineApiClient lineApiClient;
     private final GoogleDriveService driveService;
     private final PuzzleImageCatalog puzzleImageCatalog;
+    private final Duration replyDebounce;
     private final ScheduledExecutorService replyScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r, "photo-reply-debounce");
         t.setDaemon(true);
@@ -93,9 +95,18 @@ public class PhotoUploadService {
     public PhotoUploadService(LineApiClient lineApiClient,
                               GoogleDriveService driveService,
                               PuzzleImageCatalog puzzleImageCatalog) {
+        this(lineApiClient, driveService, puzzleImageCatalog, REPLY_DEBOUNCE);
+    }
+
+    // 提供給單元測試用：縮短 debounce 時間，免得每個測試都真的要等 3 秒。
+    PhotoUploadService(LineApiClient lineApiClient,
+                       GoogleDriveService driveService,
+                       PuzzleImageCatalog puzzleImageCatalog,
+                       Duration replyDebounce) {
         this.lineApiClient = lineApiClient;
         this.driveService = driveService;
         this.puzzleImageCatalog = puzzleImageCatalog;
+        this.replyDebounce = replyDebounce;
     }
 
     // Runs off the webhook thread so we can return 200 to LINE immediately.
@@ -173,7 +184,7 @@ public class PhotoUploadService {
 
     // Coalesces rapid-fire image uploads into a single reply per user.
     // Each new photo cancels the previous timer and resets it, so the
-    // reply only fires after REPLY_DEBOUNCE_SECONDS of silence.
+    // reply only fires after replyDebounce of silence.
     private void scheduleBatchedReply(String userId, String replyToken) {
         String key = userId != null ? userId : ANONYMOUS_USER_KEY;
         pendingReplies.compute(key, (k, existing) -> {
@@ -182,8 +193,8 @@ public class PhotoUploadService {
             }
             ScheduledFuture<?> future = replyScheduler.schedule(
                     () -> flushReply(k),
-                    REPLY_DEBOUNCE_SECONDS,
-                    TimeUnit.SECONDS);
+                    replyDebounce.toMillis(),
+                    TimeUnit.MILLISECONDS);
             return new PendingReply(replyToken, future);
         });
     }
@@ -224,6 +235,11 @@ public class PhotoUploadService {
     // 比對前先把全形/半形空白和換行清掉，避免「永 結 同 心」這種輸入被判錯。
     private static String normalize(String s) {
         return s.replaceAll("\\s+", "").trim();
+    }
+
+    /** 提供給單元測試用：目前指派給這位使用者的成語答案。 */
+    String assignedAnswerFor(String userKey) {
+        return userAssignments.get(userKey);
     }
 
     @PreDestroy
